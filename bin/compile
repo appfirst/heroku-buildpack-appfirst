@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# bin/compile <build-dir> <cache-dir>
+
+# fail fast
+set -e
+
+# debug
+# set -x
+
+# parse and derive params
+BUILD_DIR=$1
+CACHE_DIR=$2
+
+function print_info() {
+  echo "-----> $*"
+}
+
+function indent() {
+  sed -u 's/^/       /'
+}
+
+INSTALL_DIR=$BUILD_DIR/.appfirst
+PACKAGE="https://www.dropbox.com/s/83oxhg14thgiwu7/distrodeb64.deb"
+PACKAGE_NAME=$(basename $PACKAGE .deb)
+PACKAGE_FILE=$INSTALL_DIR/$PACKAGE_NAME.deb
+
+mkdir -p $INSTALL_DIR
+print_info "Downloading $PACKAGE"
+
+curl -s -L -z $PACKAGE_FILE -o $PACKAGE_FILE $PACKAGE 2>&1 | indent
+dpkg -x $PACKAGE_FILE $INSTALL_DIR/
+rm -rf $PACKAGE_FILE
+
+print_info "Writing profile script"
+mkdir -p $BUILD_DIR/.profile.d
+cat <<EOF >$BUILD_DIR/.profile.d/000appfirst.sh
+export PATH="\$PATH:\$HOME/.apppfirst/usr/bin:"
+export LD_LIBRARY_PATH="\$LD_LIBRARY_PATH:\$HOME/.appfirst/usr/share/appfirst"
+mkdir -p $HOME/.appfirst/var
+mkdir -p $HOME/.appfirst/opt/data
+export LD_PRELOAD="\$HOME/.appfirst/usr/share/appfirst/libwrap.so.1.0.1"
+
+if [ -f "$HOME/tid.conf" ]; then
+  TID=\`cat \$HOME/tid.conf\`
+  sed -i "/Tenant/c\   Tenant \$TID" $HOME/.appfirst/etc/AppFirst.conf
+  rm -rf $HOME/tid.conf
+fi
+
+$HOME/.appfirst/usr/bin/collector --piddir="\$HOME/.appfirst/var" --datadir="\$HOME/.appfirst/opt/data"
+EOF
+
